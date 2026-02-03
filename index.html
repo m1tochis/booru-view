@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Booru Viewer</title>
+    <title>ATF Booru Viewer</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -19,7 +19,7 @@
             padding: 0;
             background-color: var(--bg-color);
             color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: sans-serif;
         }
 
         .header {
@@ -28,93 +28,102 @@
             background-color: var(--bg-color);
             padding: 10px;
             z-index: 100;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             display: flex;
             gap: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
 
         input {
             flex-grow: 1;
-            padding: 10px;
+            padding: 12px;
             border-radius: 8px;
-            border: 1px solid var(--card-bg);
+            border: 1px solid #333;
             background-color: var(--card-bg);
             color: var(--text-color);
-            outline: none;
+            font-size: 16px;
         }
 
         button {
-            padding: 10px 20px;
+            padding: 0 20px;
             border-radius: 8px;
             border: none;
             background-color: var(--button-color);
             color: var(--button-text);
-            font-weight: bold;
+            font-size: 20px;
             cursor: pointer;
         }
 
         .gallery {
             display: grid;
-            grid-template-columns: repeat(2, 1fr); /* 2 колонки */
-            gap: 5px;
-            padding: 5px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            padding: 8px;
         }
 
         .card {
             background-color: var(--card-bg);
             border-radius: 8px;
             overflow: hidden;
+            aspect-ratio: 1 / 1.4;
             position: relative;
-            aspect-ratio: 1 / 1.4; /* Вертикальные карточки */
         }
 
         .card img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: transform 0.2s;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
 
-        .card img:active {
-            transform: scale(0.95);
-        }
+        .card img.loaded { opacity: 1; }
 
-        /* Полный экран при клике */
         .modal {
             display: none;
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.9);
-            z-index: 1000;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            flex-direction: column;
         }
-        
+
         .modal img {
             max-width: 100%;
             max-height: 80vh;
-            border-radius: 8px;
+            border-radius: 5px;
         }
 
         .modal-close {
             margin-top: 20px;
             background: #ff4444;
+            padding: 10px 30px;
+            font-size: 16px;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .error-log {
+            color: #ff5555;
+            font-size: 12px;
+            padding: 10px;
+            grid-column: span 2;
+            word-break: break-all;
         }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <input type="text" id="search" placeholder="Теги (например: femboy)...">
-        <button onclick="searchImages()">🔍</button>
+        <input type="text" id="search" placeholder="Теги...">
+        <button onclick="newSearch()">🔍</button>
     </div>
 
-    <div class="gallery" id="gallery">
-        <!-- Сюда попадут картинки -->
-    </div>
+    <div class="gallery" id="gallery"></div>
 
-    <!-- Модальное окно для просмотра -->
     <div class="modal" id="modal" onclick="closeModal()">
         <img id="fullImage" src="">
         <button class="modal-close">Закрыть</button>
@@ -122,71 +131,100 @@
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Раскрыть на весь экран
+        tg.expand();
 
-        // Адрес API
-        const BASE_URL = "https://booru.allthefallen.moe/post.json";
+        // === ТВОИ ДАННЫЕ ===
+        const LOGIN = "m1tochi2";
+        const API_KEY = "HPKPMWWyoQs7Cksd5MZ9kEqv";
         
-        // Используем прокси, чтобы обойти защиту браузера (CORS)
-        // Если сайт разрешает прямой доступ, прокси можно убрать
-        const PROXY = "https://api.allorigins.win/raw?url=";
+        // Адрес API
+        const BASE_URL = "https://booru.allthefallen.moe/posts.json";
+        
+        // Прокси (всё ещё нужен, так как сайт блокирует прямые запросы из браузера)
+        // Используем codetabs, он хорошо работает с API
+        const PROXY = "https://api.codetabs.com/v1/proxy?quest=";
 
         async function fetchImages(tags = "") {
             const gallery = document.getElementById('gallery');
-            gallery.innerHTML = '<p style="text-align:center; grid-column:span 2;">Загрузка...</p>';
+            gallery.innerHTML = '<p style="text-align:center; grid-column:span 2; margin-top:20px; color:#aaa;">Загрузка...</p>';
 
             try {
-                // Формируем ссылку: Прокси + Сайт + Теги + Лимит 20 шт
-                let url = `${PROXY}${encodeURIComponent(`${BASE_URL}?tags=${tags}&limit=20`)}`;
+                // 1. Формируем прямой URL к API с твоими ключами
+                // Добавляем login и api_key в запрос
+                const apiUrl = `${BASE_URL}?tags=${encodeURIComponent(tags)}&limit=20&login=${LOGIN}&api_key=${API_KEY}`;
                 
-                let response = await fetch(url);
-                if (!response.ok) throw new Error("Ошибка сети");
-                
-                let data = await response.json();
-                
-                gallery.innerHTML = ""; // Очистить "Загрузка..."
+                // 2. Оборачиваем в прокси
+                const finalUrl = PROXY + encodeURIComponent(apiUrl);
 
-                if (data.length === 0) {
-                    gallery.innerHTML = '<p style="text-align:center; grid-column:span 2;">Ничего не найдено 😔</p>';
+                console.log("Запрос:", finalUrl);
+
+                const response = await fetch(finalUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`Статус сети: ${response.status}`);
+                }
+
+                // Пытаемся получить текст, чтобы проверить, не пришла ли капча
+                const textData = await response.text();
+                
+                let data;
+                try {
+                    data = JSON.parse(textData);
+                } catch (e) {
+                    // Если пришел не JSON, значит прокси вернул HTML страницу с ошибкой Cloudflare
+                    throw new Error("Сайт заблокировал запрос (Cloudflare). Даже с ключом пробиться через браузер не вышло.");
+                }
+
+                gallery.innerHTML = ""; 
+
+                if (!data || data.length === 0) {
+                    gallery.innerHTML = '<p style="text-align:center; grid-column:span 2; margin-top:20px;">Пусто 🤷‍♂️</p>';
                     return;
                 }
 
                 data.forEach(post => {
-                    // Проверяем, есть ли картинка
-                    if (post.file_url || post.sample_url) {
-                        let imgUrl = post.preview_url || post.sample_url || post.file_url;
-                        let fullUrl = post.file_url || post.sample_url;
+                    // У этого сайта поля могут быть: preview_file_url, large_file_url, file_url
+                    let thumb = post.preview_file_url || post.file_url;
+                    let full = post.large_file_url || post.file_url;
 
-                        let div = document.createElement('div');
+                    if (thumb) {
+                        const div = document.createElement('div');
                         div.className = 'card';
-                        div.innerHTML = `<img src="${imgUrl}" loading="lazy" onclick="openModal('${fullUrl}')">`;
+                        
+                        const img = document.createElement('img');
+                        img.src = thumb;
+                        img.loading = "lazy";
+                        img.onload = () => img.classList.add('loaded');
+                        img.onclick = () => openModal(full);
+                        
+                        div.appendChild(img);
                         gallery.appendChild(div);
                     }
                 });
 
             } catch (e) {
-                gallery.innerHTML = `<p style="text-align:center; grid-column:span 2;">Ошибка: ${e.message}</p>`;
+                console.error(e);
+                gallery.innerHTML = `<div class="error-log">❌ Ошибка: ${e.message}</div>`;
             }
         }
 
-        function searchImages() {
-            let tag = document.getElementById('search').value;
-            fetchImages(tag);
+        function newSearch() {
+            const tags = document.getElementById('search').value;
+            fetchImages(tags);
         }
 
-        // Открытие картинки на весь экран
         function openModal(url) {
             document.getElementById('fullImage').src = url;
             document.getElementById('modal').style.display = 'flex';
-            tg.HapticFeedback.impactOccurred('light'); // Вибрация
+            tg.HapticFeedback.impactOccurred('light');
         }
 
         function closeModal() {
             document.getElementById('modal').style.display = 'none';
         }
 
-        // Загрузка при старте (пустой поиск = свежие посты)
-        fetchImages();
+        // Запуск
+        fetchImages(); 
     </script>
 </body>
 </html>
