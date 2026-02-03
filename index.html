@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- ЭТА СТРОКА ЧИНИТ ОТОБРАЖЕНИЕ КАРТИНОК: -->
+    <meta name="referrer" content="no-referrer">
     <title>Gelbooru App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
@@ -185,25 +187,29 @@
             bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(30, 30, 30, 0.8);
+            background: rgba(30, 30, 30, 0.85);
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
             padding: 10px 20px;
             border-radius: 30px;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
             display: flex;
             align-items: center;
             gap: 15px;
             z-index: 2002;
             color: white;
             font-size: 13px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
         }
 
         .dl-btn {
             background: white; color: black; border: none;
-            padding: 6px 14px; border-radius: 15px;
+            padding: 8px 16px; border-radius: 20px;
             font-weight: bold; font-size: 12px; cursor: pointer;
+            transition: opacity 0.2s;
         }
+        .dl-btn:active { opacity: 0.7; }
+        .dl-btn.loading { background: #888; pointer-events: none; }
 
         .loader { padding: 50px; text-align: center; color: #666; grid-column: span 2; }
     </style>
@@ -246,10 +252,10 @@
         
         <div class="island">
             <div style="display:flex; flex-direction:column;">
-                <span id="imgRes" style="font-weight:bold;">HD</span>
-                <span id="imgExt" style="color:#aaa;">JPG</span>
+                <span id="imgRes" style="font-weight:bold;">Loading...</span>
+                <span id="imgExt" style="color:#aaa; font-size:10px;">JPG</span>
             </div>
-            <button class="dl-btn" onclick="downloadImage()">Save</button>
+            <button class="dl-btn" id="dlBtn" onclick="downloadImage()">Save</button>
         </div>
     </div>
 
@@ -261,9 +267,11 @@
         const USER_ID = "855295";
         const API_KEY = "231d90bfd66f9dfc7d0ebe83737ed319d2ae098cc2291169e78adcb183b464c6";
         const BASE_URL = "https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1";
+        // Прокси нужен только для JSON API, картинки грузим напрямую
         const PROXY = "https://api.allorigins.win/raw?url=";
 
         let currentFileUrl = "";
+        let currentFileName = "image.png";
 
         async function fetchImages(tags) {
             const gallery = document.getElementById('gallery');
@@ -276,6 +284,7 @@
                     query += " rating:general";
                 }
 
+                // ВАЖНО: Делаем запрос через прокси
                 let url = `${BASE_URL}&limit=20&user_id=${USER_ID}&api_key=${API_KEY}&tags=${encodeURIComponent(query.trim())}`;
                 let res = await fetch(PROXY + encodeURIComponent(url));
                 let data = await res.json();
@@ -288,11 +297,13 @@
                 }
 
                 data.post.forEach(post => {
+                    // Используем file_url если есть, иначе preview
                     let thumb = post.preview_url || post.file_url;
                     if (thumb) {
                         let div = document.createElement('div');
                         div.className = 'card';
                         let img = document.createElement('img');
+                        // Картинки грузим напрямую, thanks to meta referrer
                         img.src = thumb;
                         img.onload = () => img.classList.add('loaded');
                         div.onclick = () => openModal(post);
@@ -330,16 +341,26 @@
         });
 
         function openModal(post) {
+            // Сохраняем ссылку на оригинал
             currentFileUrl = post.file_url;
-            document.getElementById('fullImage').src = post.file_url;
+            currentFileName = post.image || `image_${post.id}.png`;
+
+            const img = document.getElementById('fullImage');
+            const btn = document.getElementById('dlBtn');
+            
+            // Сбрасываем состояние кнопки
+            btn.innerText = "Save";
+            btn.classList.remove('loading');
+
+            // Грузим напрямую
+            img.src = post.file_url;
+            
             document.getElementById('imgRes').innerText = post.width + 'x' + post.height;
             
-            // Безопасное получение расширения
             let ext = "IMG";
             if (post.image) ext = post.image.split('.').pop().toUpperCase();
-            else if (post.file_url) ext = post.file_url.split('.').pop().toUpperCase();
-            
             document.getElementById('imgExt').innerText = ext;
+
             document.getElementById('modal').style.display = 'flex';
         }
 
@@ -348,8 +369,45 @@
             document.getElementById('fullImage').src = '';
         }
 
-        function downloadImage() {
-            tg.openLink(currentFileUrl);
+        async function downloadImage() {
+            const btn = document.getElementById('dlBtn');
+            btn.innerText = "Загрузка...";
+            btn.classList.add('loading');
+
+            try {
+                // 1. Качаем файл как Blob через прокси (чтобы обойти CORS при скачивании)
+                // Для картинок иногда AllOrigins подводит с большими файлами, но попробуем
+                const proxyUrl = PROXY + encodeURIComponent(currentFileUrl);
+                const response = await fetch(proxyUrl);
+                const blob = await response.blob();
+
+                // 2. Создаем ссылку на скачивание
+                const blobUrl = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = currentFileName; // Имя файла
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // 3. Убираем мусор
+                window.URL.revokeObjectURL(blobUrl);
+                
+                btn.innerText = "Готово";
+                setTimeout(() => { 
+                    btn.innerText = "Save"; 
+                    btn.classList.remove('loading');
+                }, 2000);
+
+            } catch (e) {
+                // Если сломалось скачивание Blob, открываем просто в браузере как раньше
+                btn.innerText = "Ошибка";
+                setTimeout(() => {
+                    tg.openLink(currentFileUrl); // Фолбэк
+                    btn.innerText = "Save";
+                    btn.classList.remove('loading');
+                }, 1000);
+            }
         }
 
         function switchTab(name, el) {
@@ -366,11 +424,6 @@
 
         // Start
         fetchImages("");
-
-        // Обработка глобальных ошибок
-        window.onerror = function(msg, url, line) {
-           // alert("Ошибка JS: " + msg); // Раскомментируй для отладки, если снова будет черный экран
-        };
     </script>
 </body>
 </html>
