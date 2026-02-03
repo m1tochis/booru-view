@@ -7,12 +7,12 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
-            --bg-color: #0f0f0f; /* Более глубокий черный как на фото */
+            --bg-color: #0f0f0f;
             --text-color: #ffffff;
             --card-bg: #1e1e1e;
-            --active-color: #5288c1; /* Синий телеграм */
-            --inactive-color: #8e8e93; /* Серый iOS */
-            --bar-bg: rgba(20, 20, 20, 0.85); /* Полупрозрачный фон */
+            --active-color: #5288c1;
+            --inactive-color: #8e8e93;
+            --bar-bg: rgba(20, 20, 20, 0.85);
         }
 
         body {
@@ -21,47 +21,17 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
-            padding-bottom: 90px; /* Отступ снизу, чтобы контент не перекрывался меню */
+            padding-bottom: 90px;
+            /* Убрали отступ сверху, так как шапки нет */
             -webkit-tap-highlight-color: transparent;
-        }
-
-        /* --- ВЕРХНЯЯ ШАПКА --- */
-        .header {
-            position: sticky;
-            top: 0;
-            background-color: rgba(15, 15, 15, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 10px 15px;
-            z-index: 100;
-            display: flex;
-            gap: 10px;
-        }
-
-        input {
-            flex-grow: 1;
-            padding: 10px 15px;
-            border-radius: 12px;
-            border: none;
-            background-color: #2c2c2e;
-            color: white;
-            font-size: 16px;
-            outline: none;
-        }
-
-        .search-btn {
-            background: none;
-            border: none;
-            color: var(--active-color);
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
         }
 
         /* --- ГАЛЕРЕЯ --- */
         .gallery {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 2px; /* Минимальный зазор как в галерее телефона */
+            gap: 2px;
+            padding-top: 20px; /* Небольшой отступ сверху */
         }
 
         .card {
@@ -81,22 +51,70 @@
 
         .card img.loaded { opacity: 1; }
 
+        /* --- ЭКРАН ПОИСКА (OVERLAY) --- */
+        .search-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); /* Затемнение */
+            backdrop-filter: blur(15px); /* Тот самый блюр */
+            -webkit-backdrop-filter: blur(15px);
+            z-index: 400; /* Ниже таб-бара, но выше контента */
+            display: flex;
+            align-items: flex-end; /* Прижимаем к низу */
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .search-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .search-box {
+            width: 90%;
+            margin-bottom: 90px; /* Отступ от таб-бара */
+            transform: translateY(20px);
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .search-overlay.visible .search-box {
+            transform: translateY(0);
+        }
+
+        input {
+            width: 100%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background-color: #2c2c2e;
+            color: white;
+            font-size: 18px;
+            outline: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-sizing: border-box; /* Чтобы padding не ломал ширину */
+        }
+
         /* --- НИЖНЕЕ МЕНЮ (TAB BAR) --- */
         .tab-bar {
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 55px;
+            height: 60px; /* Чуть выше */
             background-color: var(--bar-bg);
-            backdrop-filter: blur(20px); /* Эффект размытия */
+            backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-top: 1px solid rgba(255,255,255,0.1);
             display: flex;
             justify-content: space-around;
             align-items: center;
             z-index: 500;
-            padding-bottom: env(safe-area-inset-bottom); /* Отступ для iPhone полоски */
+            padding-bottom: env(safe-area-inset-bottom);
         }
 
         .tab-item {
@@ -108,26 +126,15 @@
             height: 100%;
             color: var(--inactive-color);
             cursor: pointer;
-            transition: color 0.2s;
+            transition: color 0.2s, transform 0.1s;
         }
 
-        .tab-item.active {
-            color: var(--active-color);
-        }
+        .tab-item:active { transform: scale(0.9); }
+        .tab-item.active { color: var(--active-color); }
 
-        .tab-item svg {
-            width: 26px;
-            height: 26px;
-            margin-bottom: 3px;
-            fill: currentColor;
-        }
+        .tab-item svg { width: 28px; height: 28px; fill: currentColor; }
 
-        .tab-item span {
-            font-size: 10px;
-            font-weight: 500;
-        }
-
-        /* --- МОДАЛЬНОЕ ОКНО --- */
+        /* --- МОДАЛЬНОЕ ОКНО (FULLSCREEN) --- */
         .modal {
             display: none;
             position: fixed;
@@ -138,12 +145,13 @@
             justify-content: center;
             align-items: center;
         }
-        .modal img { max-width: 100%; max-height: 85vh; object-fit: contain; }
+        .modal img { max-width: 100%; max-height: 90vh; object-fit: contain; }
         .modal-close {
             position: absolute; top: 40px; right: 20px;
-            background: rgba(255,255,255,0.2);
-            color: white; border: none; padding: 8px 15px;
-            border-radius: 20px; cursor: pointer;
+            background: rgba(255,255,255,0.15);
+            color: white; border: none; width: 40px; height: 40px;
+            border-radius: 50%; cursor: pointer; font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
         }
 
         .loader { padding: 40px; text-align: center; color: #666; grid-column: span 2; }
@@ -151,9 +159,11 @@
 </head>
 <body>
 
-    <div class="header">
-        <input type="text" id="search" placeholder="Поиск (femboy, genshin)...">
-        <button class="search-btn" onclick="newSearch()">Go</button>
+    <!-- ЭКРАН ПОИСКА -->
+    <div class="search-overlay" id="searchOverlay" onclick="closeSearch(event)">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Поиск (femboy, cat_ears)..." autocomplete="off">
+        </div>
     </div>
 
     <div class="gallery" id="gallery"></div>
@@ -162,23 +172,19 @@
     <div class="tab-bar">
         <div class="tab-item active" onclick="switchTab('home', this)">
             <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-            <span>Главная</span>
         </div>
-        <div class="tab-item" onclick="switchTab('search', this)">
+        <div class="tab-item" onclick="openSearch()">
             <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-            <span>Поиск</span>
         </div>
         <div class="tab-item" onclick="switchTab('boards', this)">
-            <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/></svg>
-            <span>Доски</span>
+            <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
         </div>
         <div class="tab-item" onclick="switchTab('profile', this)">
             <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-            <span>Профиль</span>
         </div>
     </div>
 
-    <!-- Модалка -->
+    <!-- МОДАЛКА ПРОСМОТРА -->
     <div class="modal" id="modal" onclick="closeModal()">
         <button class="modal-close">✕</button>
         <img id="fullImage" src="">
@@ -187,27 +193,23 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.enableClosingConfirmation(); // Чтобы случайно не закрыть свайпом
+        tg.enableClosingConfirmation();
 
-        // === GELBOORU KEYS ===
+        // === API GELBOORU ===
         const USER_ID = "855295";
         const API_KEY = "231d90bfd66f9dfc7d0ebe83737ed319d2ae098cc2291169e78adcb183b464c6";
         const BASE_URL = "https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1";
         const PROXY = "https://api.allorigins.win/raw?url=";
 
-        // Текущее состояние
-        let currentTab = 'home';
-
         async function fetchImages(tags = "") {
             const gallery = document.getElementById('gallery');
             gallery.innerHTML = '<div class="loader">Загрузка...</div>';
+            window.scrollTo({top: 0, behavior: 'smooth'});
 
             try {
-                // Добавляем sort:random для разнообразия, если тег пустой
-                let queryTags = tags; 
-                // if (!tags) queryTags = "sort:random"; 
-
-                const apiUrl = `${BASE_URL}&limit=20&user_id=${USER_ID}&api_key=${API_KEY}&tags=${encodeURIComponent(queryTags)}`;
+                // Если тегов нет, грузим свежее
+                let query = tags ? tags : ""; 
+                const apiUrl = `${BASE_URL}&limit=20&user_id=${USER_ID}&api_key=${API_KEY}&tags=${encodeURIComponent(query)}`;
                 const finalUrl = PROXY + encodeURIComponent(apiUrl);
 
                 const response = await fetch(finalUrl);
@@ -216,7 +218,7 @@
                 gallery.innerHTML = "";
 
                 if (!data.post || data.post.length === 0) {
-                    gallery.innerHTML = '<div class="loader">Ничего не найдено</div>';
+                    gallery.innerHTML = '<div class="loader">Ничего не найдено 🙈</div>';
                     return;
                 }
 
@@ -237,42 +239,64 @@
             }
         }
 
-        // --- ЛОГИКА ВКЛАДОК ---
+        // --- ПОИСК (OVERLAY) ---
+        const overlay = document.getElementById('searchOverlay');
+        const searchInput = document.getElementById('searchInput');
+
+        function openSearch() {
+            // Показываем оверлей
+            overlay.classList.add('visible');
+            // Фокус на поле ввода (немного задержки для анимации)
+            setTimeout(() => {
+                searchInput.focus();
+            }, 100);
+            
+            // Подсветка кнопки поиска в таббаре
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-item')[1].classList.add('active');
+        }
+
+        function closeSearch(event) {
+            // Закрываем только если клик по фону, а не по самому инпуту
+            if (event.target === overlay) {
+                overlay.classList.remove('visible');
+                searchInput.blur();
+            }
+        }
+
+        // Обработка Enter в поиске
+        searchInput.addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                const tags = searchInput.value;
+                overlay.classList.remove('visible'); // Скрываем поиск
+                searchInput.blur(); // Убираем клавиатуру
+                fetchImages(tags); // Ищем
+            }
+        });
+
+        // --- ВКЛАДКИ ---
         function switchTab(tabName, element) {
-            // Визуальное переключение
             document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
             if(element) element.classList.add('active');
 
             if (tabName === 'home') {
-                document.getElementById('search').value = "";
-                fetchImages(""); // Сброс на главную
-                window.scrollTo({top: 0, behavior: 'smooth'});
+                searchInput.value = ""; // Очистить поиск
+                fetchImages(""); // Сброс
             } 
-            else if (tabName === 'search') {
-                // Фокус на поиск
-                const input = document.getElementById('search');
-                window.scrollTo({top: 0, behavior: 'smooth'});
-                setTimeout(() => input.focus(), 300);
-            }
             else if (tabName === 'boards') {
                 const gallery = document.getElementById('gallery');
-                gallery.innerHTML = '<div class="loader" style="color:var(--active-color)">🔥 Популярное:<br><br>genshin_impact<br>blue_archive<br>azur_lane<br>ai_generated</div>';
+                gallery.innerHTML = '<div class="loader" style="color:white; text-align:left; padding:20px;">🔥 <b>Популярное:</b><br><br>• genshin_impact<br>• blue_archive<br>• azur_lane<br>• honkai:_star_rail<br>• original</div>';
             }
             else if (tabName === 'profile') {
                 const gallery = document.getElementById('gallery');
-                gallery.innerHTML = `<div class="loader">👤 <b>Профиль</b><br><br>ID: ${USER_ID}<br>Статус: Online<br>API: Active</div>`;
+                gallery.innerHTML = `<div class="loader">👤 <b>Профиль</b><br><br>User ID: ${USER_ID}<br>Статус: Работает</div>`;
             }
-        }
-
-        function newSearch() {
-            const tags = document.getElementById('search').value;
-            fetchImages(tags);
         }
 
         function openModal(url) {
             document.getElementById('fullImage').src = url;
             document.getElementById('modal').style.display = 'flex';
-            tg.HapticFeedback.impactOccurred('light');
         }
 
         function closeModal() {
